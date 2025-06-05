@@ -8,6 +8,16 @@ The aim is to integrate the latest LSL definitions for functions, constants and 
 
 ## Changelog
 
+* **0.1.10.20250616**
+    * Fixed issue with debugger where it couldn't properly locate the source to debug in some instances.
+    * Fixed an issue with llListSort where the handling for strided lists would cause unstrided lists to be jumbled.
+    * Fixed an issue with optimization of strings where un-encodable characters could make for invalid code (also fixes "\t" != llChar(9).)
+    * Fixed optimization to work in more cases that were being precluded.
+    * Updated Haskell and Cabal to be closer to modern.
+    * Added support for simulating JSON functions (llJson2List, llJsonGetValue, llJsonSetValue, llJsonValueType, llList2Json)
+    * Added support for simulating llReplaceSubString.
+    * Compiled only for win32 (not mac, linux)
+
 * **develop** (0.1.9.20250603)
     * Update Eclipse with this branch !
     * More functions and constants up to Simulator Release 2025-04-24 (e.g. llSetLinkGLTFOverrides()), thanks to [@ChloeConstantine](https://github.com/ChloeConstantine)
@@ -17,7 +27,7 @@ The aim is to integrate the latest LSL definitions for functions, constants and 
     * Editor: outline always expanded
     * Plugins version number use date yearmonthday (.qualifier) for easier update
     * Added more functions and constants (llSetLinkSitFlags, llGetLinkSitFlags, PRIM_GLTF_..., DAMAGE_TYPE_...) thanks to [@ChloeConstantine](https://github.com/ChloeConstantine)
-      
+
 * **0.1.9.12**
     * Added functions and constants till Simulator Release 2024-02-21.7995320426 (llGetNotecardLineSync, llComputeHash, llRezObjectWithParams...) thanks to [@ChloeConstantine](https://github.com/ChloeConstantine)
     * Renamed some folders (lslforge to lslforge-dev, lslforge/eclipse to lslforge-dev/eclipse-project)
@@ -39,7 +49,7 @@ The aim is to integrate the latest LSL definitions for functions, constants and 
 ## How to Install the Eclipse Plugin
 
 1. The following [Eclipse Distributions](https://www.eclipse.org/downloads/packages/release) were found working:
-   * Eclipse IDE 2024-03 (4.31.0) since 0.1.9.12, with Java 17 JRE
+   * Eclipse IDE 2024-06 (4.32.0) since 0.1.10, with Java 21 JRE
   
    * > NOTE: Oomph seems to restore LSLForge native setting despite attempts to overwrite the field. The only workaround for now is to check `[X] Skip automatic task execution at startup time` under Oomph  Setup Tasks in Preferences. 
 
@@ -47,11 +57,8 @@ The aim is to integrate the latest LSL definitions for functions, constants and 
 1. To install a plugin into Eclipse, choose `Help` > `Install New Software`. Click `Add...` and enter the link for location:
 
 	For the reported to be working releases use the link below (__/HEAD/__ in capital should always point to the default branch):  
-    	`https://raw.githubusercontent.com/koollsl/lslforge/HEAD/lslforge-dev/eclipse-project/update-site/`
+    	`https://raw.githubusercontent.com/EricBayer/lslforge/refs/heads/develop/lslforge-dev/eclipse-project/update-site/`
    
-	Alternatively you may try a specific version (including work in progress branches). Example:
-    	`https://raw.githubusercontent.com/koollsl/lslforge/0.1.9.12/lslforge-dev/eclipse-project/update-site/`
-          
 	For even older version, clone the whole repo and link your Eclipse to a particular folder under `eclipse\archive`.
 
 	> If you don't see any items for installing, try to uncheck "Group items by category"
@@ -76,7 +83,7 @@ The aim is to integrate the latest LSL definitions for functions, constants and 
     * Forcing recompilation of a module that is referenced by `*.lslp` file by opening it, doing some fake change, and hitting **Save**
 * For now only the win32 executable is compiled. But you may do your own linux or mac (see how below).
 * The official Second Life® Group for LSLForge Editor tool is [LSLForge Users](secondlife:///app/group/381ff28c-1171-27ac-77f5-ded3471b6245/about). General announcements, questions and answers.
-* In case of bugs please report right to the https://github.com/KoolLSL/lslforge/ repo.
+* In case of bugs please report right to the https://github.com/EricBayer/lslforge/ repo.
 
 ## Tips & Tricks
 
@@ -206,7 +213,7 @@ Switch to `lslforge-dev` subfolder.
 
 * Move existing plugin files from `eclipse\` to `eclipse\archive\x.x.x\` (keep `index.html`).
 
-* Eclipse for RCP and RAP Developers (using version 2024-03)
+* Eclipse for RCP and RAP Developers (using version 2024-06)
     * Use empty workspace
     * Import > Projects from Folder or Archive `lslforge-dev\eclipse-project\` (without copying)
     * If you see artifacts in the `update-site`'s project folder (`features`, `plugins`, `artifacts.jar`, `content.jar`), run `clean.bat` or `clean.sh` to delete them.
