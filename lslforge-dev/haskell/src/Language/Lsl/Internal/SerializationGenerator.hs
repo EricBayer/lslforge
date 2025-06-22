@@ -5,6 +5,7 @@ module Language.Lsl.Internal.SerializationGenerator where
 
 import Language.Haskell.TH
 import Control.Monad
+import qualified Data.ByteString.Lazy as L
 import Data.Maybe
 import qualified Data.Map as M
 import Language.Lsl.Internal.XmlCreate
@@ -13,6 +14,12 @@ import Data.Generics
 import Data.Int
 import Data.List
 import Data.Functor((<&>))
+import qualified Data.Text.Lazy             as TL
+import qualified Data.Text.Lazy.Encoding    as TL
+
+
+writeUTF8PosixFile :: FilePath -> String -> IO ()
+writeUTF8PosixFile fp s = L.writeFile fp (TL.encodeUtf8 $ TL.pack $ s)
 
 class JavaRep a where
     representative :: a
@@ -341,8 +348,8 @@ collectReps names = do
 
 saveReps :: String -> [(String,String)] -> IO ()
 saveReps pkg codeInfo = do
-        mapM_ ( \ (nm,txt) -> writeFile (nm ++ ".java") txt) codeInfo
-        writeFile "InitAll.java" $
+        mapM_ ( \ (nm,txt) -> writeUTF8PosixFile (nm ++ ".java") txt) codeInfo
+        writeUTF8PosixFile "InitAll.java" $
             "package " ++ pkg ++ ";\n" ++
             "import com.thoughtworks.xstream.XStream;\n" ++
             "public class InitAll {\n" ++

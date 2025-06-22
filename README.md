@@ -8,6 +8,11 @@ The aim is to integrate the latest LSL definitions for functions, constants and 
 
 ## Changelog
 
+* **0.1.10.20250623**
+    * Fixed an optimization bug where a global used in both the parameters and the body of an inline function would cause improper results.
+    * All java code generation switched to output Posix line ending UTF8.
+    * Compiled only for win32 (not mac, linux)
+
 * **0.1.10.20250616**
     * Fixed issue with debugger where it couldn't properly locate the source to debug in some instances.
     * Fixed an issue with llListSort where the handling for strided lists would cause unstrided lists to be jumbled.

@@ -290,19 +290,25 @@ mkParmVars ss ves = mapM (mkParmVar ss) ves <&> concat
 mkParmVar ss (Ctx _ v@(Var nm _),arg) = do
     funFacts <- get <&> optFunFacts
     locals <- get <&> concat . optLocals
-    -- We can just reference the expression if and only if:
-    --  1. We have a relatively simple expression and it's pure or it is only
-    --     used once as then the purity is moot.
-    --  2. It is not modified (as the parameter isolates the modification in
-    --     scope)
-    --  3. It is either a simple reference ot it is only used whole.  (Not quite
-    --     sure why this is needed.)
+
+    -- Things that break direct expansion of arguments in inlines:
+    --   1. A variable used in multiple input args where any usage is not pure.
+    --      None of the arguments that share can be inline expanded. (TODO)
+    --   2. A global variable used in both an input arg as well as impure in the
+    --      function body.  The argument cannot be inline expanded.
+    --   3. The argument is consumed non-whole in the body of the function and
+    --      the argument expression isn't a simple whole variable lookup.
+    --   4. The argument is modified in the function body
+    --   5. The argument contains an impure function call
+    -- Additional reasons not to inline expand:
+    --   1. The argument expression is complex and used more than once.
+
     if (
-        ((staticComplexity arg < 2) && (isRelativelyPure locals funFacts arg)) ||
-        usageCount nm ss == 1
-      ) &&
-      not (nm `isModifiedIn` ss) &&
-      (simpleRef arg || nm `isUsedOnlyWholeIn` ss)
+        (uCount == 1 && isArgSingleRewriteSafe locals ss arg) ||
+        (uCount > 1 && staticComplexity arg < 2 && isArgRewriteSafe locals funFacts ss arg)
+       ) &&
+       not (nm `isModifiedIn` ss) &&
+       (simpleRef arg || nm `isUsedOnlyWholeIn` ss)
         then do
             case arg of
                 (Ctx _ (Get (cnm,All))) -> addRename nm (ctxItem cnm)
@@ -313,6 +319,7 @@ mkParmVar ss (Ctx _ v@(Var nm _),arg) = do
             return [nullCtx $ Decl v' $ Just arg]
    where simpleRef (Ctx _ (Get (_,All))) = True
          simpleRef _                     = False
+         uCount = usageCount nm ss
 
 inlineFunc :: Ctx Func -> [Ctx Expr] -> OState (Expr,[Ctx Statement])
 inlineFunc f@(Ctx _ (Func (FuncDec _ t _) _)) args
@@ -570,15 +577,35 @@ renameRef (Ctx ctx nm, v) = do
     nm' <- inlinerRenamingFor nm
     return (Ctx ctx nm', v)
 
--- Generally this seems to denote that the function does not GENERATE side
--- effects.  It may however depend on external side effects.
-isRelativelyPure :: [String] -> M.Map String FunctionFacts -> Ctx Expr -> Bool
-isRelativelyPure locals ff = everything (&&) (True `mkQ` go)
+isArgSingleRewriteSafe :: [String] -> [Ctx Statement] -> Ctx Expr -> Bool
+isArgSingleRewriteSafe locals ss = everything (&&) (True `mkQ` go)
     where
-        -- go (Get (cnm,_)) = nm `elem` locals || nm `elem` map constName allConstants where nm = ctxItem cnm
-        -- NOTE: This seems to break most optimizations and I cannot find a
-        -- reasonable reason for why reading a global would be problematic to
-        -- our relative "purity".
+        -- If a global is used in an argument expression, it must not be
+        -- modified within the inline function or else we could out of expected
+        -- order execution when we expand directly.  If it's a local or a
+        -- constant, those are safe.  NOTE: If the function body (ss) masks the
+        -- global, we very likely will reject needlessly.
+        go (Get (cnm,_)) =
+            nm `elem` locals ||
+            nm `elem` map constName allConstants ||
+            not (nm `isModifiedIn` ss)
+          where nm = ctxItem cnm
+        go _ = True
+
+-- Determine if directly expanding an argument in an inline function is safe.
+isArgRewriteSafe :: [String] -> M.Map String FunctionFacts -> [Ctx Statement] -> Ctx Expr -> Bool
+isArgRewriteSafe locals ff ss = everything (&&) (True `mkQ` go)
+    where
+        -- If a global is used in an argument expression, it must not be
+        -- modified within the inline function or else we could out of expected
+        -- order execution when we expand directly.  If it's a local or a
+        -- constant, those are safe.  NOTE: If the function body (ss) masks the
+        -- global, we very likely will reject needlessly.
+        go (Get (cnm,_)) =
+            nm `elem` locals ||
+            nm `elem` map constName allConstants ||
+            not (nm `isModifiedIn` ss)
+          where nm = ctxItem cnm
         go (Set _ _) = False
         go (IncBy _ _) = False
         go (DecBy _ _) = False
@@ -966,7 +993,7 @@ simplifyE (BOr (Ctx c (BOr (Ctx _ (IntLit i)) j)) (Ctx _ (IntLit k))) = return (
 simplifyE (BOr (Ctx _ (IntLit i)) (Ctx c (BOr j (Ctx _ (IntLit k))))) = return (BOr j (Ctx c (IntLit (i .|. k))))
 simplifyE (BOr (Ctx _ (IntLit i)) (Ctx c (BOr (Ctx _ (IntLit j)) k))) = return (BOr k (Ctx c (IntLit (i .|. j))))
 
--- General Math
+-- General Math identities and optimizations.
 simplifyE (Neg (Ctx _ (IntLit i))) = return (IntLit (-i))
 simplifyE (Not (Ctx _ (IntLit i))) = return (IntLit (fromBool (i == 0)))
 simplifyE (Inv (Ctx _ (IntLit i))) = return (IntLit (complement i))
@@ -1025,6 +1052,10 @@ simplifyE (Lt (Ctx _ (FloatLit i)) (Ctx _ (IntLit j))) = return (IntLit (if i < 
 simplifyE (Gt (Ctx _ (FloatLit i)) (Ctx _ (IntLit j))) = return (IntLit (if i > fromIntegral j then 1 else 0))
 simplifyE (Le (Ctx _ (FloatLit i)) (Ctx _ (IntLit j))) = return (IntLit (if i <= fromIntegral j then 1 else 0))
 simplifyE (Ge (Ctx _ (FloatLit i)) (Ctx _ (IntLit j))) = return (IntLit (if i >= fromIntegral j then 1 else 0))
+
+-- String Concatenation.
+simplifyE e@(Add (Ctx _ (StringLit s0)) (Ctx _ (StringLit s1))) = return (StringLit (s0 ++ s1))
+
 simplifyE e@(Get (nm,c)) = do
        locals <- get <&> (concat . siLocalsInScope)
        if name `elem` locals
@@ -1070,14 +1101,44 @@ simplifyE e@(Call (Ctx _ nm) exprs) =
                             Right (VoidVal,_) -> return e
                             Right (v,_) -> return $ checkVal e v
                         else return e
+
+-- Literals to String.
 simplifyE e@(Cast LLString (Ctx _ (IntLit i))) = return (StringLit (show i))
 simplifyE e@(Cast LLString (Ctx _ (FloatLit f))) = return (StringLit s)
     where SVal s = toSVal (FVal f')
           f' :: Float
           f' = realToFrac f
-simplifyE e@(Cast LLFloat (Ctx _(IntLit i))) = return (FloatLit $ fromIntegral i)
+simplifyE e@(Cast LLString (Ctx _ (VecExpr
+        (Ctx _ (FloatLit x))
+        (Ctx _ (FloatLit y))
+        (Ctx _ (FloatLit z))
+    ))) = return (StringLit s)
+    where SVal s = toSVal $ VVal x' y' z'
+          x' :: Float
+          x' = realToFrac x
+          y' :: Float
+          y' = realToFrac y
+          z' :: Float
+          z' = realToFrac z
+simplifyE e@(Cast LLString (Ctx _ (RotExpr
+        (Ctx _ (FloatLit x))
+        (Ctx _ (FloatLit y))
+        (Ctx _ (FloatLit z))
+        (Ctx _ (FloatLit s))
+    ))) = return (StringLit sl)
+    where SVal sl = toSVal $ RVal x' y' z' s'
+          x' :: Float
+          x' = realToFrac x
+          y' :: Float
+          y' = realToFrac y
+          z' :: Float
+          z' = realToFrac z
+          s' :: Float
+          s' = realToFrac s
+-- TODO: List to string
+
+simplifyE e@(Cast LLFloat (Ctx _ (IntLit i))) = return (FloatLit $ fromIntegral i)
 simplifyE e@(Cast LLInteger (Ctx _ (FloatLit f))) = return (IntLit $ truncate f)
-simplifyE e@(Add (Ctx _ (StringLit s0)) (Ctx _ (StringLit s1))) = return (StringLit (s0 ++ s1))
 simplifyE e@(VecExpr eX eY eZ) = return (VecExpr (toFloatLit eX) (toFloatLit eY) (toFloatLit eZ))
 simplifyE e@(RotExpr eX eY eZ eS) = return (RotExpr (toFloatLit eX) (toFloatLit eY) (toFloatLit eZ) (toFloatLit eS))
 simplifyE e = return e

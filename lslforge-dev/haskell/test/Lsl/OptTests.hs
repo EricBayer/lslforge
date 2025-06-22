@@ -30,11 +30,12 @@ tscript l s v = TestCase $
 
 v0 lib cs os = do
     let rs = renderCompiledScript "" os
+    let line = (replicate 60 '-') ++ "\n"
     when showResults $ putStr ("\n" ++ rs)
     case parseScriptFromString rs of
-        Left e -> assertFailure (show e)
+        Left e -> assertFailure ((show e) ++ "\n" ++  line ++ rs ++ line)
         Right cs' -> case compileLSLScript' [] cs' of
-             Left e -> assertFailure (show e)
+             Left e -> assertFailure ((show e) ++ "\n" ++  line ++ rs ++ line)
              Right cs'' -> do
                      let result1 = exec cs
                      let result2 = exec cs''
@@ -47,11 +48,12 @@ v0 lib cs os = do
 
 v1 lib cs os = do
     let rs = renderCompiledScript "" os
+    let line = (replicate 60 '-') ++ "\n"
     when showResults $ putStr ("\n" ++ rs)
     case parseScriptFromString rs of
-        Left e -> assertFailure (show e)
+        Left e -> assertFailure ((show e) ++ "\n" ++  line ++ rs ++ line)
         Right cs' -> case compileLSLScript' [] cs' of
-             Left e -> assertFailure (show e)
+             Left e -> assertFailure ((show e) ++ "\n" ++  line ++ rs ++ line)
              Right _ -> do
                      let result2 = exec os
                      let oslog = filtLog result2
